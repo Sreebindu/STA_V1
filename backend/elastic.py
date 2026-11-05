@@ -1688,6 +1688,261 @@ def get_dns_requests_for_sinkhole(sinkhole_id, page=1, per_page=50, search=""):
     )
 
 
+def get_dns_sinkhole_domain_details(sinkhole_id, domain):
+    """Return connected-IP activity and domain totals for one domain."""
+    es = get_es()
+    if not es:
+        raise RuntimeError("Elasticsearch is unavailable")
+
+    pcap_ids = get_pcap_ids_for_sinkhole(sinkhole_id, es)
+    if not pcap_ids:
+        return {"host": domain, "request_count": 0, "timeline": [], "ips": []}
+
+    response = es.search(
+        index=DNS_REQUESTS_INDEX,
+        body={
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"host": domain}},
+                        {"terms": {"pcap_id": pcap_ids}},
+                    ],
+                },
+            },
+            "_source": [
+                "request_count",
+                "pcap_id",
+                "connected_ips",
+            ],
+            "size": 500,
+        },
+        scroll="2m",
+    )
+    scroll_id = response.get("_scroll_id")
+    total_requests = 0
+    request_records = []
+    timeline = {}
+    ip_details = {}
+
+    try:
+        hits = response.get("hits", {}).get("hits", [])
+        while hits:
+            for hit in hits:
+                source = hit.get("_source", {})
+                request_count = int(source.get("request_count", 0) or 0)
+                total_requests += request_count
+                request_timestamps = set()
+                pcap_id = source.get("pcap_id")
+                for connected_ip in source.get("connected_ips") or []:
+                    ip = connected_ip.get("ip")
+                    if not ip:
+                        continue
+
+                    timestamp = connected_ip.get("timestamp")
+                    if timestamp:
+                        try:
+                            parsed_timestamp = datetime.fromisoformat(
+                                str(timestamp).replace("Z", "+00:00")
+                            )
+                            if parsed_timestamp.tzinfo is None:
+                                parsed_timestamp = parsed_timestamp.replace(
+                                    tzinfo=timezone.utc
+                                )
+                            timestamp = parsed_timestamp.astimezone(
+                                timezone.utc
+                            ).isoformat().replace("+00:00", "Z")
+                        except (TypeError, ValueError):
+                            timestamp = None
+
+                    item = ip_details.setdefault(
+                        ip,
+                        {
+                            "ip": ip,
+                            "isp": connected_ip.get("isp") or "Unknown",
+                            "country": connected_ip.get("country"),
+                            "city": connected_ip.get("city"),
+                            "latitude": connected_ip.get("latitude"),
+                            "longitude": connected_ip.get("longitude"),
+                            "first_seen": None,
+                            "last_seen": None,
+                            "timestamps": set(),
+                            "url_record_count": 0,
+                            "pcap_ids": set(),
+                        },
+                    )
+                    item["url_record_count"] += 1
+                    if pcap_id:
+                        item["pcap_ids"].add(pcap_id)
+                    if timestamp:
+                        request_timestamps.add(timestamp)
+                        item["timestamps"].add(timestamp)
+                        point = timeline.setdefault(
+                            timestamp,
+                            {
+                                "timestamp": timestamp,
+                                "ips": set(),
+                                "pcap_ids": set(),
+                            },
+                        )
+                        point["ips"].add(ip)
+                        if pcap_id:
+                            point["pcap_ids"].add(pcap_id)
+                        if (
+                            not item["first_seen"]
+                            or timestamp < item["first_seen"]
+                        ):
+                            item["first_seen"] = timestamp
+                        if (
+                            not item["last_seen"]
+                            or timestamp > item["last_seen"]
+                        ):
+                            item["last_seen"] = timestamp
+
+                request_records.append(
+                    {
+                        "request_count": request_count,
+                        "timestamps": sorted(request_timestamps),
+                    }
+                )
+
+            response = es.scroll(scroll_id=scroll_id, scroll="2m")
+            scroll_id = response.get("_scroll_id", scroll_id)
+            hits = response.get("hits", {}).get("hits", [])
+    finally:
+        if scroll_id:
+            es.clear_scroll(scroll_id=scroll_id)
+
+    timeline_rows = [
+        {
+            **point,
+            "ip_count": len(point["ips"]),
+            "ips": sorted(point["ips"]),
+            "pcap_ids": sorted(point["pcap_ids"]),
+        }
+        for point in timeline.values()
+    ]
+    timeline_rows.sort(key=lambda point: point["timestamp"])
+
+    domain_ips = list(ip_details)
+    if domain_ips:
+        geo_response = es.search(
+            index=PCAP_IPS_INDEX,
+            body={
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"terms": {"pcap_id": pcap_ids}},
+                            {
+                                "nested": {
+                                    "path": "ips",
+                                    "query": {
+                                        "terms": {"ips.ip": domain_ips}
+                                    },
+                                }
+                            },
+                        ],
+                    }
+                },
+                "_source": [
+                    "pcap_id",
+                    "ips.ip",
+                    "ips.country",
+                    "ips.city",
+                    "ips.latitude",
+                    "ips.longitude",
+                ],
+                "size": 500,
+            },
+            scroll="2m",
+        )
+        geo_scroll_id = geo_response.get("_scroll_id")
+        try:
+            geo_hits = geo_response.get("hits", {}).get("hits", [])
+            while geo_hits:
+                for hit in geo_hits:
+                    for metadata in hit.get("_source", {}).get("ips") or []:
+                        ip = metadata.get("ip")
+                        if ip not in ip_details:
+                            continue
+                        item = ip_details[ip]
+                        for field in ("country", "city", "latitude", "longitude"):
+                            value = metadata.get(field)
+                            if item.get(field) is None and value is not None:
+                                if field == "country":
+                                    value = str(value).strip()
+                                    value = _COUNTRY_ALIASES.get(
+                                        value.casefold(),
+                                        value.upper() if len(value) == 2 else value,
+                                    )
+                                item[field] = value
+                geo_response = es.scroll(scroll_id=geo_scroll_id, scroll="2m")
+                geo_scroll_id = geo_response.get("_scroll_id", geo_scroll_id)
+                geo_hits = geo_response.get("hits", {}).get("hits", [])
+        finally:
+            if geo_scroll_id:
+                es.clear_scroll(scroll_id=geo_scroll_id)
+
+        host_response = es.search(
+            index=DNS_REQUESTS_INDEX,
+            body={
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"terms": {"pcap_id": pcap_ids}},
+                            {"terms": {"connected_ips.ip": domain_ips}},
+                        ],
+                    }
+                },
+                "_source": ["host", "connected_ips.ip"],
+                "size": 500,
+            },
+            scroll="2m",
+        )
+        host_scroll_id = host_response.get("_scroll_id")
+        hosts_by_ip = {ip: set() for ip in domain_ips}
+        try:
+            host_hits = host_response.get("hits", {}).get("hits", [])
+            while host_hits:
+                for hit in host_hits:
+                    source = hit.get("_source", {})
+                    host = source.get("host")
+                    if not host:
+                        continue
+                    normalized_host = str(host).strip().rstrip(".").casefold()
+                    if not normalized_host:
+                        continue
+                    for connected_ip in source.get("connected_ips") or []:
+                        ip = connected_ip.get("ip")
+                        if ip in hosts_by_ip:
+                            hosts_by_ip[ip].add(normalized_host)
+                host_response = es.scroll(scroll_id=host_scroll_id, scroll="2m")
+                host_scroll_id = host_response.get("_scroll_id", host_scroll_id)
+                host_hits = host_response.get("hits", {}).get("hits", [])
+        finally:
+            if host_scroll_id:
+                es.clear_scroll(scroll_id=host_scroll_id)
+
+    ips = [
+        {
+            **item,
+            "domain_count": len(hosts_by_ip.get(item["ip"], set())),
+            "domains": sorted(hosts_by_ip.get(item["ip"], set())),
+            "pcap_ids": sorted(item["pcap_ids"]),
+            "timestamps": sorted(item["timestamps"]),
+        }
+        for item in ip_details.values()
+    ]
+    ips.sort(key=lambda item: (-item["domain_count"], item["ip"]))
+
+    return {
+        "host": domain,
+        "request_count": total_requests,
+        "request_records": request_records,
+        "timeline": timeline_rows,
+        "ips": ips,
+    }
+
+
 def get_dns_sinkhole_summary(sinkhole_id):
     """Return DNS request totals and top domain, country, and ISP stats."""
     es = get_es()

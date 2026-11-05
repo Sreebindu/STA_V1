@@ -941,6 +941,9 @@ export function WorldMapLeaflet({
   reportLabel,
   reportType,
   enableViewToggle = false,
+  initialZoomOverride,
+  minZoomOverride = 2,
+  showPacketCounts = true,
 }) {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedCountry, setSelectedCountry] = useState(null);
@@ -1133,7 +1136,8 @@ export function WorldMapLeaflet({
   );
   const initialCenter = DEFAULT_MAP_CENTER;
 
-  const initialZoom = mode === "summary" ? 2 : 2.2;
+  const initialZoom =
+    initialZoomOverride ?? (mode === "summary" ? 2 : 2.2);
 
   const mapContainerStyle = {
     "--leaflet-bg": SUMMARY_MAP_BACKGROUND,
@@ -1165,7 +1169,7 @@ export function WorldMapLeaflet({
           <MapContainer
             center={initialCenter}
             zoom={initialZoom}
-            minZoom={2}
+            minZoom={minZoomOverride}
             maxZoom={12}
             style={{ height: "100%", width: "100%", background: "transparent" }}
             zoomControl={false}
@@ -1398,16 +1402,18 @@ export function WorldMapLeaflet({
                             {point.count.toLocaleString()}
                           </span>
                         </div>
-                        <div className="flex justify-between gap-4">
-                          <span className="text-slate-500 font-black text-[9px]">
-                            Packets:
-                          </span>
-                          <span className="text-foreground text-[9px]">
-                            {point.hasPacketCount
-                              ? point.totalPackets.toLocaleString()
-                              : "—"}
-                          </span>
-                        </div>
+                        {showPacketCounts && (
+                          <div className="flex justify-between gap-4">
+                            <span className="text-slate-500 font-black text-[9px]">
+                              Packets:
+                            </span>
+                            <span className="text-foreground text-[9px]">
+                              {point.hasPacketCount
+                                ? point.totalPackets.toLocaleString()
+                                : "—"}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Tooltip>
@@ -1699,9 +1705,11 @@ export function WorldMapLeaflet({
                     <th className="px-3 py-2 text-[11px] font-black text-slate-500 ">
                       IP Address
                     </th>
-                    <th className="px-3 py-2 text-[11px] font-black text-slate-500  text-right">
-                      Packets
-                    </th>
+                    {showPacketCounts && (
+                      <th className="px-3 py-2 text-[11px] font-black text-slate-500 text-right">
+                        Packets
+                      </th>
+                    )}
                     <th className="w-10"></th>
                   </tr>
                 </thead>
@@ -1714,13 +1722,15 @@ export function WorldMapLeaflet({
                       <td className="px-3 py-2.5 font-bold text-[11px] text-foreground">
                         {ip.ip}
                       </td>
-                      <td className="px-3 py-2.5 text-right font-black text-[10px] text-blue-500">
-                        {ip.packet_count != null || ip.packets != null
-                          ? Number(
-                              ip.packet_count ?? ip.packets,
-                            ).toLocaleString()
-                          : "—"}
-                      </td>
+                      {showPacketCounts && (
+                        <td className="px-3 py-2.5 text-right font-black text-[10px] text-blue-500">
+                          {ip.packet_count != null || ip.packets != null
+                            ? Number(
+                                ip.packet_count ?? ip.packets,
+                              ).toLocaleString()
+                            : "—"}
+                        </td>
+                      )}
                       <td className="px-3 py-2.5 text-right">
                         <button
                           onClick={() => onIpClick?.(ip.ip)}
@@ -2183,4 +2193,7 @@ WorldMapLeaflet.propTypes = {
   reportLabel: PropTypes.string,
   reportType: PropTypes.string,
   enableViewToggle: PropTypes.bool,
+  initialZoomOverride: PropTypes.number,
+  minZoomOverride: PropTypes.number,
+  showPacketCounts: PropTypes.bool,
 };
