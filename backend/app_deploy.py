@@ -767,6 +767,20 @@ def get_dns_requests(
         return api_response(data=[], success=False, error=str(e), status_code=500)
 
 
+@app.get('/api/pcaps/{set_id}/dns-sinkhole/domains/{domain}/details')
+def get_dns_sinkhole_domain_details(
+    set_id: int,
+    domain: str,
+    current_user: dict = Depends(require_role('admin', 'user')),
+):
+    try:
+        return api_response(
+            data=elastic.get_dns_sinkhole_domain_details(set_id, domain)
+        )
+    except Exception as e:
+        return api_response(data=None, success=False, error=str(e), status_code=500)
+
+
 @app.get('/api/pcaps/{set_id}/dns-sinkhole/summary')
 def get_dns_sinkhole_summary(
     set_id: int,

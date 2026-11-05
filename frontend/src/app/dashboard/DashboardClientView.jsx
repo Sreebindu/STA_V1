@@ -31,6 +31,7 @@ DashboardClientView.propTypes = {
 
 export default function DashboardClientView({ session }) {
   const [activeTab, setActiveTab] = useState("Pcap Summary");
+  const [initialIp, setInitialIp] = useState("");
   const [reportInitialMode, setReportInitialMode] = useState("country");
 
   const tabBarRef = useRef(null);
@@ -49,6 +50,7 @@ export default function DashboardClientView({ session }) {
     if (tab) {
       setActiveTab(tab);
     }
+    setInitialIp(url.searchParams.get("ip") || "");
   }, []);
 
   // ---------------------------------------------------------
@@ -64,6 +66,7 @@ export default function DashboardClientView({ session }) {
       } else {
         setActiveTab("Pcap Summary");
       }
+      setInitialIp(url.searchParams.get("ip") || "");
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -169,6 +172,14 @@ export default function DashboardClientView({ session }) {
       behavior: "auto",
     });
   };
+
+  useEffect(() => {
+    if (activeTab !== "IP Search" || !initialIp || isLoading) return;
+
+    requestAnimationFrame(() => {
+      scrollToTabBar();
+    });
+  }, [activeTab, initialIp, isLoading]);
 
   // ---------------------------------------------------------
   // Tab change
@@ -645,7 +656,7 @@ export default function DashboardClientView({ session }) {
         {/* -----------------------------------------------------
             IP SEARCH
             ----------------------------------------------------- */}
-        {activeTab === "IP Search" && <IPSearch />}
+        {activeTab === "IP Search" && <IPSearch initialIp={initialIp} />}
 
         {/* -----------------------------------------------------
             PCAP INSIGHTS

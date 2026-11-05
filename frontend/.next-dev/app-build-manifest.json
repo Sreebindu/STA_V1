@@ -1,0 +1,31 @@
+{
+  "pages": {
+    "/layout": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/layout.css",
+      "static/chunks/app/layout.js"
+    ],
+    "/sinkhole/dnssinkhole/[domain]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/sinkhole/dnssinkhole/[domain]/page.css",
+      "static/chunks/app/sinkhole/dnssinkhole/[domain]/page.js"
+    ],
+    "/api/proxy/[...apiPath]/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/proxy/[...apiPath]/route.js"
+    ],
+    "/sinkhole/dnssinkhole/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/sinkhole/dnssinkhole/page.js"
+    ],
+    "/api/auth/refresh/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/auth/refresh/route.js"
+    ]
+  }
+}

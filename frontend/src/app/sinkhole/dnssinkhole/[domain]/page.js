@@ -1,7 +1,10 @@
 import { getAuth } from "@/auth";
 import { notFound, redirect } from "next/navigation";
 import PcapErrorView from "@/app/pcaps/[setId]/PcapErrorView";
-import { dnssinkhole } from "../dnsApiService";
+import {
+  dnssinkhole,
+  getDnsSinkholeDomainDetails,
+} from "../dnsApiService";
 import DomainDetailClient from "./DomainDetailClient";
 
 export default async function DnsSinkholeDomainPage({ params }) {
@@ -19,7 +22,15 @@ export default async function DnsSinkholeDomainPage({ params }) {
 
   if (!selectedDomain) notFound();
 
+  const domainDetails = await getDnsSinkholeDomainDetails(
+    session.accessToken,
+    domain,
+  );
+
   return (
-    <DomainDetailClient selectedDomain={selectedDomain} pcapSetId="set-2" />
+    <DomainDetailClient
+      selectedDomain={selectedDomain}
+      domainDetails={domainDetails}
+    />
   );
 }

@@ -251,7 +251,7 @@ export default function DomainwiseClient({ dnsData }) {
                     </div>
 
                     <div className="mt-2 w-full px-4">
-                      <div className="grid w-full grid-cols-2 gap-x-6 gap-y-8 text-[16px] text-muted-foreground">
+                      <div className="grid w-full grid-cols-2 gap-x-2 gap-y-6 text-[16px] text-muted-foreground">
                         {/* Requests */}
                         <div className="flex items-center gap-3">
                           <Activity

@@ -1,0 +1,6 @@
+{
+  "/api/proxy/[...apiPath]/route": "app/api/proxy/[...apiPath]/route.js",
+  "/api/auth/refresh/route": "app/api/auth/refresh/route.js",
+  "/sinkhole/dnssinkhole/[domain]/page": "app/sinkhole/dnssinkhole/[domain]/page.js",
+  "/sinkhole/dnssinkhole/page": "app/sinkhole/dnssinkhole/page.js"
+}
